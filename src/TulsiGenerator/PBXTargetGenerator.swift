@@ -589,6 +589,7 @@ final class PBXTargetGenerator: PBXTargetGeneratorProtocol {
 
       var localPreprocessorDefines = defines
       let localIncludes = includes.mutableCopy() as! NSMutableOrderedSet
+      var otherSwiftFlags = Set<String>()
       let otherCFlags = NSMutableOrderedSet()
       if let copts = ruleEntry.attributes[.copts] as? [String], !copts.isEmpty {
         for opt in copts {
@@ -603,7 +604,11 @@ final class PBXTargetGenerator: PBXTargetGeneratorProtocol {
             }
             localIncludes.add(path)
           } else {
-            otherCFlags.add(opt)
+            if ruleEntry.type == "swift_library" {
+                otherSwiftFlags.insert(opt)
+            } else {
+                otherCFlags.add(opt)
+            }
           }
         }
       }
@@ -661,16 +666,16 @@ final class PBXTargetGenerator: PBXTargetGeneratorProtocol {
         // is needed to avoid a case where Clang may load the same header both in modular and
         // non-modular contexts, leading to duplicate definitions in the same file.
         // See llvm.org/bugs/show_bug.cgi?id=19501
-        let otherSwiftFlags = ruleEntry.objCModuleMaps.map() {
+        otherSwiftFlags.formUnion(ruleEntry.objCModuleMaps.map() {
            "-Xcc -fmodule-map-file=$(\(PBXTargetGenerator.WorkspaceRootVarName))/\($0.fullPath)"
-        }
+        })
 
         let dependencyLabels = ruleEntry.dependencies.map() { BuildLabel($0) }
         let indexerData = IndexerData(indexerNameInfo: [IndexerData.NameInfoToken(ruleEntry: ruleEntry)],
                                       dependencies: Set(dependencyLabels),
                                       preprocessorDefines: localPreprocessorDefines,
                                       otherCFlags: otherCFlags.array as! [String],
-                                      otherSwiftFlags: otherSwiftFlags,
+                                      otherSwiftFlags: Array(otherSwiftFlags),
                                       includes: resolvedIncludes,
                                       generatedIncludes: generatedIncludes.array as! [String],
                                       frameworkSearchPaths: frameworkSearchPaths.array as! [String],
@@ -1115,6 +1120,9 @@ final class PBXTargetGenerator: PBXTargetGeneratorProtocol {
     if !data.frameworkSearchPaths.isEmpty {
       buildSettings["FRAMEWORK_SEARCH_PATHS"] = "$(inherited) " + data.frameworkSearchPaths.joined(separator: " ")
     }
+
+
+    buildSettings["OTHER_LDFLAGS"] = "-undefined dynamic_lookup"
 
     if !data.swiftIncludePaths.isEmpty {
       let paths = data.swiftIncludePaths.joined(separator: " ")
