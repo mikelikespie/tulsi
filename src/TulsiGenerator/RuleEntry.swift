@@ -168,6 +168,7 @@ public final class RuleEntry: RuleInfo {
     case has_swift_dependency
     case includes
     case launch_storyboard
+    case module_name
     case pch
     case swift_language_version
     case swift_toolchain
