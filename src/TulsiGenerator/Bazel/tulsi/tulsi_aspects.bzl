@@ -193,8 +193,12 @@ def _file_metadata(f, use_tulsi_symlink=False):
   # logic properly homed in Bazel.
   is_dir = (f.basename.find('.') == -1)
 
+  if f.path.startswith('external/'):
+    path = f.path
+  else:
+    path = f.short_path
   return _struct_omitting_none(
-      path=f.short_path,
+      path=path,
       src=f.is_source,
       root=root_execution_path_fragment,
       is_dir=is_dir

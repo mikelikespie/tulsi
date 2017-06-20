@@ -107,7 +107,7 @@ final class BazelWorkspaceInfoExtractor: BazelWorkspaceInfoExtractorProtocol {
 
   func resolveExternalReferencePath(_ path: String) -> String? {
     let execRoot = workspacePathFetcher.getExecutionRoot()
-    let fullURL = NSURL.fileURL(withPathComponents: [execRoot, path])?.resolvingSymlinksInPath()
+    let fullURL = NSURL.fileURL(withPathComponents: [execRoot, "../__main__", path])?.resolvingSymlinksInPath()
     return fullURL?.path
   }
 
