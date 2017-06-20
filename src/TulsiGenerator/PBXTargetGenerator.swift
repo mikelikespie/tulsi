@@ -530,6 +530,8 @@ final class PBXTargetGenerator: PBXTargetGeneratorProtocol {
           includes.add("$(\(PBXTargetGenerator.WorkspaceRootVarName))/\(bazelBinPath)/\(packageQualifiedPath)")
 //          includes.add("$(\(PBXTargetGenerator.WorkspaceRootVarName))/\(bazelGenfilesPath)/\(packageQualifiedPath)")
           includes.add("$(\(PBXTargetGenerator.WorkspaceRootVarName))/\(tulsiIncludesPath)/\(packageQualifiedPath)")
+          includes.add("$(\(PBXTargetGenerator.WorkspaceRootVarName))/\(tulsiIncludesPath)/x/x/genfiles/\(packageQualifiedPath)")
+
         }
       }
 
@@ -1107,7 +1109,7 @@ final class PBXTargetGenerator: PBXTargetGeneratorProtocol {
     if !data.includes.isEmpty || !data.generatedIncludes.isEmpty {
       let includes = data.includes.joined(separator: " ")
       let generatedIncludes = data.generatedIncludes.joined(separator: " ")
-      buildSettings["HEADER_SEARCH_PATHS"] = "$(inherited) \(includes) \(generatedIncludes)"
+      buildSettings["HEADER_SEARCH_PATHS"] = "$(inherited) \(includes) \(generatedIncludes) "
     }
 
     if !data.frameworkSearchPaths.isEmpty {
