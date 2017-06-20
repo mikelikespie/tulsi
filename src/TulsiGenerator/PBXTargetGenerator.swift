@@ -184,7 +184,7 @@ final class PBXTargetGenerator: PBXTargetGeneratorProtocol {
   }()
 
   /// The path to the Tulsi generated outputs root. For more information see tulsi_aspects.bzl
-  let tulsiIncludesPath = "tulsi-includes/x/x"
+  let tulsiIncludesPath = "tulsi-includes"
 
   /// Bazel's package_path value.
   let bazelPackagePath: String
@@ -1089,6 +1089,12 @@ final class PBXTargetGenerator: PBXTargetGeneratorProtocol {
     if !allOtherCFlags.isEmpty {
       buildSettings["OTHER_CFLAGS"] = allOtherCFlags.joined(separator: " ")
     }
+
+    buildSettings["SWIFT_ACTIVE_COMPILATION_CONDITIONS"] = data.preprocessorDefines
+        .sorted()
+        .map { $0.replacingOccurrences(of: "=1", with: "") }
+        .filter { !$0.contains("=") }
+        .joined(separator: " ")
 
     if let bridgingHeader = data.bridgingHeader {
       buildSettings["SWIFT_OBJC_BRIDGING_HEADER"] = PBXTargetGenerator.projectRefForBazelFileInfo(bridgingHeader)

@@ -167,7 +167,7 @@ def _convert_outpath_to_symlink_path(path, use_tulsi_symlink=False):
       first_dash >= 0 and
       first_dash < len(components[0])):
     if use_tulsi_symlink:
-      return 'tulsi-includes/x/x/x/x/' + '/'.join(components[3:])
+      return 'tulsi-includes/' + '/'.join(components[3:])
     else:
       return path[:first_dash + 1] + '/'.join(components[2:])
   return path
@@ -201,7 +201,7 @@ def _file_metadata(f, use_tulsi_symlink=False):
   is_dir = (f.basename.find('.') == -1)
 
   if use_tulsi_symlink or not f.path.startswith('external/'):
-    path = f.short_path
+    path = _resolve_generated_path(f)
   else:
     path = f.path
   return _struct_omitting_none(
@@ -607,6 +607,10 @@ def _tulsi_sources_aspect(target, ctx):
       module_name=_module_name(ctx, str(target.label)),
   )
 
+  enable_modules = _get_opt_attr(rule_attr, 'enable_modules')
+  if enable_modules != None:
+    enable_modules = int(enable_modules)
+
   # Inheritable attributes are pulled up through dependencies of type 'binary'
   # to simplify handling in Tulsi (so it appears as though bridging_header is
   # defined on an ios_application rather than its associated objc_binary, for
@@ -615,7 +619,7 @@ def _tulsi_sources_aspect(target, ctx):
       bridging_header=_collect_first_file(rule_attr, 'bridging_header'),
       compiler_defines=_extract_compiler_defines(ctx),
       defines=_getattr_as_list(rule_attr, 'defines'),
-      enable_modules=_get_opt_attr(rule_attr, 'enable_modules'),
+      enable_modules=enable_modules,
       includes=['/'.join(ctx.build_file_path.split('/')[:-1]) + "/" + i for i in _getattr_as_list(rule_attr, 'includes')],
       launch_storyboard=_collect_first_file(rule_attr, 'launch_storyboard'),
       pch=_collect_first_file(rule_attr, 'pch'),
@@ -716,6 +720,13 @@ def _tulsi_sources_aspect(target, ctx):
       transitive_attributes=transitive_attributes,
   )
 
+def _resolve_generated_path(f):
+  if not f.is_source:
+    return 'x/x/' + '/'.join(f.path.split('/')[2:])
+  else:
+    return f.path
+
+
 def _tulsi_outputs_aspect(target, ctx):
   """Collects outputs of each build invocation."""
 
@@ -753,17 +764,19 @@ def _tulsi_outputs_aspect(target, ctx):
 
   # Collect generated files for bazel_build.py to copy under Tulsi root.
   all_files = depset()
+  hdrs = depset()
 
-  if target_kind in _SOURCE_GENERATING_RULES + _NON_ARC_SOURCE_GENERATING_RULES:
-    objc_provider = _get_opt_attr(target, 'objc')
-    if hasattr(objc_provider, 'source') and hasattr(objc_provider, 'header'):
-      all_files += objc_provider.source
-      all_files += objc_provider.header
+  #if target_kind in _SOURCE_GENERATING_RULES + _NON_ARC_SOURCE_GENERATING_RULES:
+  objc_provider = _get_opt_attr(target, 'objc')
+  if hasattr(objc_provider, 'source') and hasattr(objc_provider, 'header'):
+    all_files += objc_provider.source
+    all_files += objc_provider.module_map
+    hdrs += objc_provider.header
 
   all_files += _collect_swift_modules(target)
   all_files += _collect_module_maps(target)
   textual_hdrs = depset(_collect_artifacts(rule, 'attr.textual_hdrs'))
-  hdrs = depset(_collect_artifacts(rule, 'attr.hdrs'))
+  hdrs += depset(_collect_artifacts(rule, 'attr.hdrs'))
   generated_srcs = depset([s for s in _collect_artifacts(rule, 'attr.srcs') if not s.is_source])
 
   all_files += (generated_srcs
@@ -775,10 +788,7 @@ def _tulsi_outputs_aspect(target, ctx):
   generated_srcs  = []
 
   for f in tulsi_generated_files:
-    if not f.is_source:
-      path = 'x/x/' + '/'.join(f.path.split('/')[2:])
-    else:
-      path = f.path
+    path = _resolve_generated_path(f)
     generated_srcs += [(f.path, path)]
 
   info = _struct_omitting_none(
