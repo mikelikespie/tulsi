@@ -19,19 +19,21 @@ NOTE: This script must be executed in the same directory as the Xcode project's
 main group in order to generate correct debug symbols.
 """
 
+import StringIO
 import collections
 import json
 import os
+import pprint
 import re
 import shutil
 import stat
-import StringIO
 import subprocess
 import sys
 import tempfile
 import textwrap
 import time
 import zipfile
+
 import tulsi_logging
 
 
@@ -904,6 +906,7 @@ class BazelBuildBridge(object):
 
       for gs in data['generated_sources']:
         real_path, link_path = gs
+
         src = os.path.join(self.bazel_build_workspace_root, real_path)
 
         # Bazel outputs are not guaranteed to be created if nothing references
@@ -915,7 +918,7 @@ class BazelBuildBridge(object):
         # The /x/x/ part is here to match the number of directory components
         # between tulsi root and bazel root. See tulsi_aspects.bzl for futher
         # explanation.
-        dst = os.path.join(tulsi_root, 'x/x/', link_path)
+        dst = os.path.join(tulsi_root, link_path)
         self._PrintVerbose('Symlinking %s to %s' % (src, dst), 2)
 
         dst_dir = os.path.split(dst)[0]
@@ -1598,6 +1601,33 @@ class BazelBuildBridge(object):
     _PrintXcodeWarning('Found target source path not on local filesystem: %s' %
                        path)
     _PrintXcodeWarning('Ignoring path. Debugging might not work as expected.')
+
+  def _WriteNewModulemap(self, f, name, type, generated_srcs, hdrs, textual_hdrs):
+    print >> f, "module {label} {{".format(label=name)
+    print >> f, "    export *"
+
+    def print_submodule(h, header_prefix):
+      submodule_name = h.replace('.', '_').replace('-', '_').replace('/', '_').replace('+', "_")
+      print >> f, "  module {name} {{".format(name=submodule_name)
+      print >> f, "    {header_prefix}header \"{path}\"".format(
+        header_prefix= header_prefix, path="XXX",
+      )
+      print >> f, "  }"
+
+    for h in generated_srcs:
+      if not h.endswith('.h'):
+        continue
+      print_submodule(h, "" if type.startswith('cc_') else "textual ")
+
+    for h in textual_hdrs:
+      print_submodule(h, "textual ")
+
+    for h in hdrs:
+      print_submodule(h, "")
+
+    print >> f, "  export *"
+    print >> f, "}"
+    print >> f
 
 
 if __name__ == '__main__':

@@ -97,6 +97,8 @@ _SOURCE_GENERATING_RULES = set([
 _NON_ARC_SOURCE_GENERATING_RULES = set([
     'objc_proto_library',
     'cc_proto_library',
+    'make_framework_headermap',
+    'make_preserving_headermap',
 ])
 
 def _dict_omitting_none(**kwargs):
@@ -121,7 +123,7 @@ def _convert_outpath_to_symlink_path(path, use_tulsi_symlink=False):
   and the bazel_build.py script will link the artifacts into the correct
   location under it.
 
-  Tulsi root is located at WORKSPACE/tulsi-includes/x/x/.
+  Tulsi root is located at WORKSPACE/tulsi-includes/x/x/x/x.
   The two "x" directories are stubs to match the number of path components, so
   that relative paths work with the new location. Some Bazel outputs, like
   module maps, use relative paths to reference other files in the build.
@@ -129,7 +131,12 @@ def _convert_outpath_to_symlink_path(path, use_tulsi_symlink=False):
   In short, when `use_tulsi_symlink` is `True`, this method will transform
     bazel-out/ios-x86_64-min7.0/genfiles/foo
   to
-    tulsi-includes/x/x/foo
+    tulsi-includes/x/x/x/x/foo
+
+  and
+    external/foo/bar.h
+  to
+    tulsi-includes/external/foo/bar.h
 
   When `use_tulsi_symlink` is `False`, this method will transform
     bazel-outbin/ios-x86_64-min7.0/genfiles/foo
@@ -160,7 +167,7 @@ def _convert_outpath_to_symlink_path(path, use_tulsi_symlink=False):
       first_dash >= 0 and
       first_dash < len(components[0])):
     if use_tulsi_symlink:
-      return 'tulsi-includes/x/x/' + '/'.join(components[3:])
+      return 'tulsi-includes/x/x/x/x/' + '/'.join(components[3:])
     else:
       return path[:first_dash + 1] + '/'.join(components[2:])
   return path
@@ -171,7 +178,7 @@ def _file_metadata(f, use_tulsi_symlink=False):
   if not f:
     return None
 
-  if not f.is_source:
+  if use_tulsi_symlink or not f.is_source:
     root_path = f.root.path
     symlink_path = _convert_outpath_to_symlink_path(
         root_path,
@@ -193,10 +200,10 @@ def _file_metadata(f, use_tulsi_symlink=False):
   # logic properly homed in Bazel.
   is_dir = (f.basename.find('.') == -1)
 
-  if f.path.startswith('external/'):
-    path = f.path
-  else:
+  if use_tulsi_symlink or not f.path.startswith('external/'):
     path = f.short_path
+  else:
+    path = f.path
   return _struct_omitting_none(
       path=path,
       src=f.is_source,
@@ -439,7 +446,7 @@ def _extract_generated_sources_and_includes(target):
 
   if hasattr(objc_provider, 'include'):
     includes = [_convert_outpath_to_symlink_path(x, use_tulsi_symlink=True)
-                for x in objc_provider.include]
+                for x in (objc_provider.include + objc_provider.include_system)]
   return file_metadatas, includes
 
 
@@ -746,6 +753,7 @@ def _tulsi_outputs_aspect(target, ctx):
 
   # Collect generated files for bazel_build.py to copy under Tulsi root.
   all_files = depset()
+
   if target_kind in _SOURCE_GENERATING_RULES + _NON_ARC_SOURCE_GENERATING_RULES:
     objc_provider = _get_opt_attr(target, 'objc')
     if hasattr(objc_provider, 'source') and hasattr(objc_provider, 'header'):
@@ -754,16 +762,29 @@ def _tulsi_outputs_aspect(target, ctx):
 
   all_files += _collect_swift_modules(target)
   all_files += _collect_module_maps(target)
-  all_files += (_collect_artifacts(rule, 'attr.srcs')
-                + _collect_artifacts(rule, 'attr.hdrs')
-                + _collect_artifacts(rule, 'attr.textual_hdrs'))
+  textual_hdrs = depset(_collect_artifacts(rule, 'attr.textual_hdrs'))
+  hdrs = depset(_collect_artifacts(rule, 'attr.hdrs'))
+  generated_srcs = depset([s for s in _collect_artifacts(rule, 'attr.srcs') if not s.is_source])
 
-  tulsi_generated_files += depset(
-      [x for x in all_files.to_list() if not x.is_source])
+  all_files += (generated_srcs
+                + hdrs
+                + textual_hdrs)
+
+  tulsi_generated_files += all_files
+
+  generated_srcs  = []
+
+  for f in tulsi_generated_files:
+    if not f.is_source:
+      path = 'x/x/' + '/'.join(f.path.split('/')[2:])
+    else:
+      path = f.path
+    generated_srcs += [(f.path, path)]
 
   info = _struct_omitting_none(
       artifacts=artifacts,
-      generated_sources=[(x.path, x.short_path) for x in tulsi_generated_files])
+      generated_sources=generated_srcs,
+  )
 
   output = ctx.new_file(target.label.name + '.tulsiouts')
   ctx.file_action(output, info.to_json())
@@ -772,6 +793,7 @@ def _tulsi_outputs_aspect(target, ctx):
       output_groups={
           'tulsi-outputs': [output],
       },
+      # Generated files also contain headers now
       tulsi_generated_files=tulsi_generated_files,
   )
 
