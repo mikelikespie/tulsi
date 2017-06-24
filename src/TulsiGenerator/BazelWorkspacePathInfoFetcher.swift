@@ -161,8 +161,11 @@ class BazelWorkspacePathInfoFetcher {
       }
 
       switch key {
-        case "execution_root":
-          executionRoot = value
+//      case "execution_root":
+//        executionRoot = value
+// Currently a bug in bazel where it is returning a bogus file, so we detect this via the genfiles path
+      case "bazel-genfiles":
+            executionRoot = URL(fileURLWithPath: value).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().path
 
         case "package_path":
           packagePath = value
