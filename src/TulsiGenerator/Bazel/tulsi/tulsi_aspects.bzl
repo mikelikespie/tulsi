@@ -34,6 +34,7 @@ _TULSI_COMPILE_DEPS = [
     'binary',
     'bundles',
     'deps',
+    'exports',
     'extension',
     'extensions',
     'frameworks',
